@@ -22,7 +22,7 @@ from app.models.common_models import ApiResponse
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 
-firebase_service = FirebaseService()
+from app.services.firebase_service import firebase_service
 
 
 class UserUpdateRequest(BaseModel):

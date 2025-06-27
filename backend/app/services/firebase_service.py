@@ -18,37 +18,65 @@ class FirebaseService:
     
     def __init__(self):
         self.db = None
-        self._initialize_firebase()
+        self._initialized = False
+        self._init_error = None
     
     def _initialize_firebase(self):
-        """Initialize Firebase Admin SDK"""
+        """Initialize Firebase Admin SDK lazily"""
+        if self._initialized:
+            return self.db is not None
+            
         try:
             # Check if Firebase is already initialized
-            firebase_admin.get_app()
-            logger.info("Firebase app already initialized")
-        except ValueError:
-            # Initialize Firebase
-            cred_dict = get_firebase_credentials()
-            
-            if not cred_dict.get('project_id'):
-                logger.warning("Firebase credentials not configured, initializing with default project")
-                # For development, we'll skip the credential verification
-                firebase_admin.initialize_app()
-                logger.info("Firebase initialized without credentials for development")
-            else:
+            try:
+                firebase_admin.get_app()
+                logger.info("Firebase app already initialized")
+            except ValueError:
+                # Initialize Firebase
+                cred_dict = get_firebase_credentials()
+                
+                # Check if we have the minimum required configuration
+                if not cred_dict.get('project_id'):
+                    logger.warning("Firebase credentials not properly configured, skipping Firebase initialization")
+                    self._init_error = "Firebase credentials not configured"
+                    self._initialized = True
+                    return False
+                
+                # Handle missing private key gracefully
+                if not cred_dict.get('private_key'):
+                    logger.warning("Firebase private key not configured, skipping Firebase initialization")
+                    self._init_error = "Firebase private key not configured"
+                    self._initialized = True
+                    return False
+                
                 cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred)
                 logger.info("Firebase app initialized successfully with credentials")
-        
-        self.db = firestore.client()
+            
+            self.db = firestore.client()
+            self._initialized = True
+            return True
+            
+        except Exception as e:
+            logger.error("Failed to initialize Firebase", error=str(e))
+            self._init_error = str(e)
+            self._initialized = True
+            return False
+    
+    def _get_db(self):
+        """Get Firestore database client"""
+        if not self._initialize_firebase():
+            raise Exception(f"Firebase not available: {self._init_error}")
+        return self.db
     
     async def create_document(self, collection: str, document_id: str, data: Dict[str, Any]) -> bool:
         """Create a document in Firestore"""
         try:
+            db = self._get_db()
             data['created_at'] = datetime.utcnow()
             data['updated_at'] = datetime.utcnow()
             
-            self.db.collection(collection).document(document_id).set(data)
+            db.collection(collection).document(document_id).set(data)
             logger.info("Document created", collection=collection, document_id=document_id)
             return True
         except Exception as e:
@@ -58,7 +86,8 @@ class FirebaseService:
     async def get_document(self, collection: str, document_id: str) -> Optional[Dict[str, Any]]:
         """Get a document from Firestore"""
         try:
-            doc = self.db.collection(collection).document(document_id).get()
+            db = self._get_db()
+            doc = db.collection(collection).document(document_id).get()
             if doc.exists:
                 data = doc.to_dict()
                 data['id'] = doc.id
@@ -71,8 +100,9 @@ class FirebaseService:
     async def update_document(self, collection: str, document_id: str, data: Dict[str, Any]) -> bool:
         """Update a document in Firestore"""
         try:
+            db = self._get_db()
             data['updated_at'] = datetime.utcnow()
-            self.db.collection(collection).document(document_id).update(data)
+            db.collection(collection).document(document_id).update(data)
             logger.info("Document updated", collection=collection, document_id=document_id)
             return True
         except Exception as e:
@@ -82,7 +112,8 @@ class FirebaseService:
     async def delete_document(self, collection: str, document_id: str) -> bool:
         """Delete a document from Firestore"""
         try:
-            self.db.collection(collection).document(document_id).delete()
+            db = self._get_db()
+            db.collection(collection).document(document_id).delete()
             logger.info("Document deleted", collection=collection, document_id=document_id)
             return True
         except Exception as e:
@@ -98,7 +129,8 @@ class FirebaseService:
     ) -> List[Dict[str, Any]]:
         """Query a collection with optional filters"""
         try:
-            query = self.db.collection(collection)
+            db = self._get_db()
+            query = db.collection(collection)
             
             # Apply filters
             if filters:
@@ -128,7 +160,8 @@ class FirebaseService:
     async def get_collection_count(self, collection: str, filters: Optional[List[tuple]] = None) -> int:
         """Get count of documents in a collection"""
         try:
-            query = self.db.collection(collection)
+            db = self._get_db()
+            query = db.collection(collection)
             
             if filters:
                 for field, operator, value in filters:
@@ -143,13 +176,14 @@ class FirebaseService:
     async def batch_write(self, operations: List[Dict[str, Any]]) -> bool:
         """Perform batch write operations"""
         try:
-            batch = self.db.batch()
+            db = self._get_db()
+            batch = db.batch()
             
             for op in operations:
                 operation_type = op['type']
                 collection = op['collection']
                 document_id = op['document_id']
-                doc_ref = self.db.collection(collection).document(document_id)
+                doc_ref = db.collection(collection).document(document_id)
                 
                 if operation_type == 'set':
                     batch.set(doc_ref, op['data'])
@@ -164,7 +198,17 @@ class FirebaseService:
         except Exception as e:
             logger.error("Failed to perform batch write", error=str(e))
             return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Check Firebase service health"""
+        try:
+            if self._initialize_firebase():
+                return {"status": "healthy", "service": "firebase"}
+            else:
+                return {"status": "unavailable", "service": "firebase", "error": self._init_error}
+        except Exception as e:
+            return {"status": "error", "service": "firebase", "error": str(e)}
 
 
-# Global Firebase service instance
+# Global Firebase service instance - will not initialize on import
 firebase_service = FirebaseService() 

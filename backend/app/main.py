@@ -5,7 +5,6 @@ Main application entry point
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 import structlog
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -24,22 +23,13 @@ setup_logging()
 logger = structlog.get_logger()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    logger.info("Starting Recipe AI App backend...")
-    yield
-    logger.info("Shutting down Recipe AI App backend...")
-
-
 # Create FastAPI application
 app = FastAPI(
     title="Recipe AI App API",
     description="AI-powered recipe generation with personalized recommendations",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,
+    redoc_url="/redoc"
 )
 
 # Configure CORS
@@ -56,11 +46,28 @@ app.add_middleware(
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "Recipe AI App API",
-        "version": "1.0.0"
-    }
+    try:
+        return {
+            "status": "healthy",
+            "service": "Recipe AI App API",
+            "version": "1.0.0",
+            "environment": settings.NODE_ENV
+        }
+    except Exception as e:
+        logger.error("Health check failed", error=str(e))
+        return {
+            "status": "error",
+            "service": "Recipe AI App API",
+            "version": "1.0.0",
+            "error": str(e)
+        }
+
+
+# Simple test endpoint
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint for basic connectivity test"""
+    return {"message": "Recipe AI App API is running"}
 
 
 # Include API routes

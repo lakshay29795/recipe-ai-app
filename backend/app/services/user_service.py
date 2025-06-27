@@ -21,6 +21,7 @@ class UserService:
     async def create_user(self, user_data: Dict[str, Any]) -> Optional[User]:
         """Create a new user"""
         try:
+
             user_id = user_data.get('id')
             if not user_id:
                 logger.error("User ID is required")

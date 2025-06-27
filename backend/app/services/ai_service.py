@@ -21,19 +21,35 @@ class AIService:
     
     def __init__(self):
         self.client = None
-        self._initialize_openai()
+        self._initialized = False
+        self._init_error = None
     
     def _initialize_openai(self):
-        """Initialize OpenAI client"""
+        """Initialize OpenAI client lazily"""
+        if self._initialized:
+            return self.client is not None
+            
         try:
             if not settings.OPENAI_API_KEY:
                 logger.warning("OpenAI API key not configured")
-                return
-            
+                self._init_error = "OpenAI API key not configured"
+                self._initialized = True
+                return False
+
             self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
             logger.info("OpenAI client initialized successfully")
+            self._initialized = True
+            return True
         except Exception as e:
             logger.error("Failed to initialize OpenAI client", error=str(e))
+            self._init_error = str(e)
+            self._initialized = True
+            return False
+    
+    def _ensure_client(self):
+        """Ensure OpenAI client is available"""
+        if not self._initialize_openai():
+            raise Exception(f"OpenAI client not available: {self._init_error}")
     
     async def generate_recipe(
         self,
@@ -46,9 +62,7 @@ class AIService:
         additional_notes: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Generate a recipe using OpenAI GPT-4"""
-        if not self.client:
-            logger.error("OpenAI client not initialized")
-            return None
+        self._ensure_client()
         
         try:
             # Build the prompt
