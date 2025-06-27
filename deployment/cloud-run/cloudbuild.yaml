@@ -1,0 +1,42 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', 
+      '-f', 'deployment/docker/Dockerfile.backend',
+      '-t', 'gcr.io/$PROJECT_ID/recipe-ai-backend:$COMMIT_SHA',
+      '-t', 'gcr.io/$PROJECT_ID/recipe-ai-backend:latest',
+      './backend'
+    ]
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/recipe-ai-backend:$COMMIT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/recipe-ai-backend:latest']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', 'recipe-ai-backend',
+      '--image', 'gcr.io/$PROJECT_ID/recipe-ai-backend:$COMMIT_SHA',
+      '--region', 'us-central1',
+      '--platform', 'managed',
+      '--allow-unauthenticated',
+      '--memory', '2Gi',
+      '--cpu', '1',
+      '--concurrency', '80',
+      '--max-instances', '10',
+      '--port', '8080',
+      '--set-env-vars', 'NODE_ENV=production',
+      '--timeout', '300'
+    ]
+
+images:
+  - 'gcr.io/$PROJECT_ID/recipe-ai-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/recipe-ai-backend:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY 
