@@ -3,7 +3,7 @@ User-related models
 """
 
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from datetime import datetime
 from .common_models import (
     DietaryRestriction, SkillLevel, SpiceLevel, TimestampMixin
@@ -12,7 +12,7 @@ from .common_models import (
 
 class User(TimestampMixin):
     id: str
-    email: EmailStr
+    email: str
     display_name: str
     photo_url: Optional[str] = None
     is_active: bool = True
@@ -72,7 +72,7 @@ class UserProfileLegacy(TimestampMixin):
 
 # Request/Response models
 class UserRegistrationRequest(BaseModel):
-    email: EmailStr
+    email: str
     display_name: str
     photo_url: Optional[str] = None
 

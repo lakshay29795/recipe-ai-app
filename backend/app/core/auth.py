@@ -16,6 +16,7 @@ logger = structlog.get_logger(__name__)
 
 # Security scheme for Bearer token
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 class AuthenticationError(Exception):
@@ -142,7 +143,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
         )
 
 
-async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)) -> Optional[Dict[str, Any]]:
+async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(optional_security)) -> Optional[Dict[str, Any]]:
     """Dependency to get the current user if authenticated, None otherwise"""
     if not credentials:
         return None
