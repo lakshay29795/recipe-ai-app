@@ -30,8 +30,19 @@ async def verify_firebase_token(token: str) -> Dict[str, Any]:
         try:
             firebase_admin.get_app()
         except ValueError:
-            # Initialize Firebase for development
-            firebase_admin.initialize_app()
+            # Initialize Firebase with proper credentials
+            from app.core.config import get_firebase_credentials
+            from firebase_admin import credentials
+            
+            cred_dict = get_firebase_credentials()
+            if cred_dict.get('project_id') and cred_dict.get('private_key'):
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                logger.info("Firebase initialized with credentials for authentication")
+            else:
+                # Fallback to default initialization for development
+                firebase_admin.initialize_app()
+                logger.warning("Firebase initialized without credentials")
         
         # Verify the Firebase ID token
         decoded_token = firebase_auth.verify_id_token(token)
